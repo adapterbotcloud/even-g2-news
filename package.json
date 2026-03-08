@@ -1,0 +1,23 @@
+{
+  "name": "even-g2-news",
+  "version": "1.0.0",
+  "description": "Notícias brasileiras nos Even G2 Smart Glasses via RSS",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "server": "tsx server/index.ts"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "^0.0.7",
+    "express": "^4.21.0",
+    "rss-parser": "^3.13.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "tsx": "^4.19.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17"
+  }
+}

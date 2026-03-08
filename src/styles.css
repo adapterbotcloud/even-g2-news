@@ -1,0 +1,14 @@
+body {
+  font-family: system-ui, sans-serif;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #1a1a1a;
+  color: #0f0;
+}
+#status { color: #888; font-size: 14px; margin: 10px 0; }
+#current-news { margin-top: 20px; }
+.news-item { border: 1px solid #333; padding: 10px; margin: 5px 0; border-radius: 4px; }
+.news-source { color: #0a0; font-weight: bold; font-size: 12px; }
+.news-title { margin: 5px 0; }
+.news-time { color: #666; font-size: 11px; }
