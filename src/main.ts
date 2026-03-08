@@ -8,7 +8,7 @@ import {
   RebuildPageContainer,
 } from '@evenrealities/even_hub_sdk'
 
-type Screen = 'sources' | 'headlines' | 'settings'
+type Screen = 'sources' | 'headlines' | 'detail' | 'settings'
 
 interface NewsItem {
   title: string
@@ -174,6 +174,61 @@ async function showHeadlines() {
     return
   }
 
+  // Usa ListContainer pra headlines — permite swipe pra navegar
+  const header = new TextContainerProperty({
+    xPosition: 0,
+    yPosition: 0,
+    width: W,
+    height: 36,
+    borderWidth: 1,
+    borderColor: 10,
+    borderRdaius: 0,
+    paddingLength: 4,
+    containerID: 1,
+    containerName: 'header',
+    content: truncate(`← ${sourceName}`, 100),
+    isEventCapture: 0,
+  })
+
+  const headlineItems = items.map((item, i) => {
+    const prefix = i === selectedNewsIndex ? '→ ' : '  '
+    const dateStr = item.date ? ` (${item.date})` : ''
+    return truncate(`${prefix}${item.title}${dateStr}`, 64)
+  })
+
+  const list = new ListContainerProperty({
+    xPosition: 0,
+    yPosition: 40,
+    width: W,
+    height: H - 40,
+    borderWidth: 0,
+    borderColor: 5,
+    borderRdaius: 0,
+    paddingLength: 6,
+    containerID: 2,
+    containerName: 'list',
+    itemContainer: new ListItemContainerProperty({
+      itemCount: headlineItems.length,
+      itemName: headlineItems,
+    }),
+    isEventCapture: 1,
+  })
+
+  const container = {
+    containerTotalNum: 2,
+    listObject: [list],
+    textObject: [header],
+  }
+
+  await bridge.rebuildPageContainer(container as RebuildPageContainer)
+  renderBrowserUI()
+}
+
+// Tela de detalhe da notícia (texto completo)
+async function showNewsDetail() {
+  if (!bridge) return
+  const sourceName = sourceNames[selectedSourceIndex]
+  const items = newsCache[sourceName] || []
   const item = items[selectedNewsIndex]
   if (!item) return
 
@@ -183,7 +238,6 @@ async function showHeadlines() {
   body += `\n${item.summary || ''}`
 
   await showOnGlasses(header, body)
-  renderBrowserUI()
 }
 
 async function showOnGlasses(headerText: string, bodyText: string) {
@@ -416,10 +470,22 @@ function handleSelect() {
     selectedNewsIndex = 0
     expandedHeadlineIndex = null
     showHeadlines()
+  } else if (currentScreen === 'headlines') {
+    // Abrir detalhe da notícia selecionada
+    currentScreen = 'detail'
+    showNewsDetail()
+    renderBrowserUI()
   }
 }
 
 function handleBack() {
+  if (currentScreen === 'detail') {
+    // Voltar do detalhe pra lista de headlines
+    currentScreen = 'headlines'
+    if (bridge) showHeadlines()
+    else renderBrowserUI()
+    return
+  }
   if (currentScreen === 'headlines') {
     showSourceList()
     return
@@ -470,18 +536,14 @@ function setupInputHandlers() {
       logDebug(`listEvent: ${JSON.stringify(ev)}`)
       const idx = ev.currentSelectItemIndex as number | undefined
       if (idx !== undefined && idx >= 0) {
-        // Scroll — update selection
         if (currentScreen === 'sources') {
           selectedSourceIndex = idx
-          logDebug(`Navegando: ${sourceNames[idx]} (index ${idx})`)
+          logDebug(`Navegando fonte: ${sourceNames[idx]} (${idx})`)
           renderBrowserUI()
         } else if (currentScreen === 'headlines') {
-          const items = newsCache[sourceNames[selectedSourceIndex]] || []
-          if (idx < items.length) {
-            selectedNewsIndex = idx
-            logDebug(`Notícia: ${idx}`)
-            showHeadlines()
-          }
+          selectedNewsIndex = idx
+          logDebug(`Navegando notícia: ${idx}`)
+          renderBrowserUI()
         }
       } else {
         // Tap/click on list (no index change) — confirm selection
