@@ -451,17 +451,101 @@ function handleRefresh() {
 function setupInputHandlers() {
   if (!bridge) return
 
-  bridge.addEventListener('SINGLE_TAP_EVENT', () => handleSelect())
-  bridge.addEventListener('DOUBLE_TAP_EVENT', () => handleBack())
-  bridge.addEventListener('LONG_PRESS_EVENT', () => handleRefresh())
+  bridge.onEvenHubEvent((event) => {
+    // Log ALL events for debugging
+    const debugEl = document.getElementById('debug-log')
+    const logDebug = (msg: string) => {
+      console.log(`[BR News] ${msg}`)
+      if (debugEl) {
+        debugEl.textContent += `${new Date().toLocaleTimeString()}: ${msg}\n`
+        debugEl.scrollTop = debugEl.scrollHeight
+      }
+    }
 
-  bridge.addEventListener('SCROLL_DOWN_EVENT', () => handleDown())
-  bridge.addEventListener('SCROLL_UP_EVENT', () => handleUp())
-  bridge.addEventListener('SCROLL_BOTTOM_EVENT', () => handleDown())
-  bridge.addEventListener('SCROLL_TOP_EVENT', () => handleUp())
+    logDebug(`Event: ${JSON.stringify(event)}`)
 
-  bridge.addEventListener('NOD_DOWN_EVENT', () => handleDown())
-  bridge.addEventListener('NOD_UP_EVENT', () => handleUp())
+    // List events (scroll/select on list containers)
+    if (event.listEvent) {
+      const ev = event.listEvent as Record<string, unknown>
+      logDebug(`listEvent: ${JSON.stringify(ev)}`)
+      const idx = ev.currentSelectItemIndex as number | undefined
+      if (idx !== undefined && idx >= 0) {
+        // Scroll — update selection
+        if (currentScreen === 'sources') {
+          selectedSourceIndex = idx
+          logDebug(`Navegando: ${sourceNames[idx]} (index ${idx})`)
+          renderBrowserUI()
+        } else if (currentScreen === 'headlines') {
+          const items = newsCache[sourceNames[selectedSourceIndex]] || []
+          if (idx < items.length) {
+            selectedNewsIndex = idx
+            logDebug(`Notícia: ${idx}`)
+            showHeadlines()
+          }
+        }
+      } else {
+        // Tap/click on list (no index change) — confirm selection
+        logDebug(`Tap confirmado! Tela: ${currentScreen}`)
+        handleSelect()
+      }
+    }
+
+    // Text events (scroll/click no container de texto — tela de notícias)
+    if (event.textEvent) {
+      const ev = event.textEvent as Record<string, unknown>
+      const evType = Number(ev.eventType)
+      logDebug(`textEvent type: ${evType}`)
+
+      switch (evType) {
+        case 0: // CLICK no texto
+          handleSelect()
+          break
+        case 1: // SCROLL_TOP — notícia anterior
+          handleUp()
+          break
+        case 2: // SCROLL_BOTTOM — próxima notícia
+          handleDown()
+          break
+        case 3: // DOUBLE_CLICK — voltar
+          handleBack()
+          break
+      }
+    }
+
+    // System events — OsEventTypeList enum:
+    // 0=CLICK, 1=SCROLL_TOP, 2=SCROLL_BOTTOM, 3=DOUBLE_CLICK
+    // 4=FOREGROUND_ENTER, 5=FOREGROUND_EXIT, 6=ABNORMAL_EXIT
+    //
+    // Na prática do G2+R1:
+    // - Swipe no anel = listEvent com currentSelectItemIndex (navegação)
+    // - Tap no anel = sysEvent 3 (DOUBLE_CLICK) = confirmar/selecionar
+    // - CLICK (0) = tap na haste dos óculos = voltar
+    if (event.sysEvent) {
+      const ev = event.sysEvent as Record<string, unknown>
+      const type = Number(ev.eventType)
+      logDebug(`sysEvent type: ${type}`)
+
+      if (isNaN(type)) return // ignore empty sysEvents
+
+      // sysEvent 3 (double tap / tap no anel) = voltar
+      switch (type) {
+        case 0: // CLICK
+          logDebug('sysEvent CLICK')
+          handleSelect()
+          break
+        case 1: // SCROLL_TOP
+          handleUp()
+          break
+        case 2: // SCROLL_BOTTOM
+          handleDown()
+          break
+        case 3: // DOUBLE_CLICK (tap no anel) — voltar
+          logDebug('Double tap → voltando')
+          handleBack()
+          break
+      }
+    }
+  })
 }
 
 function renderBrowserUI() {
@@ -758,11 +842,37 @@ async function init() {
     headerSettingsButton.addEventListener('click', () => openSettings())
   }
 
+  const debugLog = (msg: string) => {
+    console.log(`[BR News] ${msg}`)
+    const el = document.getElementById('debug-log')
+    if (el) {
+      el.textContent += `${new Date().toLocaleTimeString()}: ${msg}\n`
+      el.scrollTop = el.scrollHeight
+    }
+  }
+
+  debugLog('Iniciando app...')
+  debugLog(`Fontes: ${sourceNames.join(', ')}`)
+  debugLog('Aguardando Even App Bridge...')
+
   try {
     bridge = await waitForEvenAppBridge()
-    if (statusEl) statusEl.textContent = 'Conectado ao G2'
+    debugLog(`✅ Bridge conectada!`)
+    if (statusEl) statusEl.textContent = '✅ Conectado ao G2'
+
+    const deviceInfo = await bridge.getDeviceInfo()
+    debugLog(`Device: ${deviceInfo ? JSON.stringify(deviceInfo) : 'null'}`)
+
+    const userInfo = await bridge.getUserInfo()
+    debugLog(`User: ${userInfo ? userInfo.name : 'null'}`)
+
     setupInputHandlers()
+    debugLog('Input handlers registrados')
+
+    debugLog('Criando containers nos óculos...')
     await showSourceList()
+    debugLog('✅ Containers criados!')
+
     setInterval(() => {
       refreshSourcesAndNews().then(() => {
         if (currentScreen === 'settings') {
@@ -776,8 +886,10 @@ async function init() {
         showHeadlines()
       })
     }, 5 * 60 * 1000)
-  } catch {
-    if (statusEl) statusEl.textContent = 'Modo browser (sem G2)'
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    debugLog(`❌ Erro: ${errMsg}`)
+    if (statusEl) statusEl.textContent = `❌ ${errMsg}`
     renderBrowserUI()
   }
 }

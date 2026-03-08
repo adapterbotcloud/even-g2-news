@@ -1,7 +1,15 @@
 {
+  "package_id": "cloud.adapterbot.brnews",
+  "edition": "202603",
   "name": "BR News",
-  "description": "Notícias brasileiras via RSS - G1, UOL, Valor, O Povo, Diário do Nordeste",
   "version": "1.0.0",
+  "min_app_version": "0.1.0",
+  "tagline": "Notícias brasileiras nos óculos G2",
+  "description": "Leitor de notícias brasileiras via RSS - O Povo, Diário do Nordeste, UOL, G1, Valor Econômico",
   "author": "AdapterBot",
-  "icon": "📰"
+  "entrypoint": "index.html",
+  "permissions": {
+    "network": ["*"],
+    "fs": ["./data"]
+  }
 }
