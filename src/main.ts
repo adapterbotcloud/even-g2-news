@@ -4,6 +4,8 @@ import {
   TextContainerProperty,
   ListContainerProperty,
   ListItemContainerProperty,
+  CreateStartUpPageContainer,
+  RebuildPageContainer,
 } from '@evenrealities/even_hub_sdk'
 
 type Screen = 'sources' | 'headlines' | 'settings'
@@ -26,6 +28,7 @@ interface SourceResponse {
 }
 
 let bridge: EvenAppBridge | null = null
+let glassesInitialized = false
 let currentScreen: Screen = 'sources'
 let selectedSourceIndex = 0
 let selectedNewsIndex = 0
@@ -137,7 +140,18 @@ async function showSourceList() {
     isEventCapture: 1,
   })
 
-  await bridge.createStartUpPageContainer(2, [header, list])
+  const container = {
+    containerTotalNum: 2,
+    listObject: [list],
+    textObject: [header],
+  }
+
+  if (!glassesInitialized) {
+    await bridge.createStartUpPageContainer(container as CreateStartUpPageContainer)
+    glassesInitialized = true
+  } else {
+    await bridge.rebuildPageContainer(container as RebuildPageContainer)
+  }
   renderBrowserUI()
 }
 
@@ -205,7 +219,17 @@ async function showOnGlasses(headerText: string, bodyText: string) {
     isEventCapture: 1,
   })
 
-  await bridge.createStartUpPageContainer(2, [header, body])
+  const container = {
+    containerTotalNum: 2,
+    textObject: [header, body],
+  }
+
+  if (!glassesInitialized) {
+    await bridge.createStartUpPageContainer(container as CreateStartUpPageContainer)
+    glassesInitialized = true
+  } else {
+    await bridge.rebuildPageContainer(container as RebuildPageContainer)
+  }
 }
 
 async function fetchSource(sourceName: string) {
