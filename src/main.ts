@@ -2,226 +2,386 @@ import {
   waitForEvenAppBridge,
   EvenAppBridge,
   TextContainerProperty,
-  TextContainerUpgrade,
+  ListContainerProperty,
+  ListItemContainerProperty,
 } from '@evenrealities/even_hub_sdk'
 
-// ─── State ───
-let bridge: EvenAppBridge | null = null
-let newsItems: Array<{
+type Screen = 'sources' | 'headlines'
+
+interface NewsItem {
   title: string
   source: string
   date: string
   summary: string
-}> = []
-let currentIndex = 0
-let currentSource = 'Todas'
-const sources = ['Todas', 'G1', 'Folha', 'Valor', 'Estadão', 'Folha Pol']
-let sourceIndex = 0
+}
 
-// ─── G2 Display ───
-const CANVAS_W = 576
-const CANVAS_H = 288
+interface SourceResponse {
+  sources: Array<{ name: string }>
+}
 
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text
-  return text.slice(0, maxLen - 3) + '...'
+let bridge: EvenAppBridge | null = null
+let currentScreen: Screen = 'sources'
+let selectedSourceIndex = 0
+let selectedNewsIndex = 0
+let expandedHeadlineIndex: number | null = null
+
+let sourceNames: string[] = ['G1', 'Folha', 'Valor', 'Estadão', 'Folha Pol']
+const newsCache: Record<string, NewsItem[]> = {}
+
+const W = 576
+const H = 288
+
+function truncate(s: string, n: number): string {
+  return s.length <= n ? s : `${s.slice(0, n - 3)}...`
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+async function showSourceList() {
+  if (!bridge) return
+  currentScreen = 'sources'
+
+  const header = new TextContainerProperty({
+    xPosition: 0,
+    yPosition: 0,
+    width: W,
+    height: 36,
+    borderWidth: 1,
+    borderColor: 10,
+    borderRdaius: 0,
+    paddingLength: 4,
+    containerID: 1,
+    containerName: 'header',
+    content: '📰 BR News ── Escolha a fonte',
+    isEventCapture: 0,
+  })
+
+  const items = sourceNames.map((name, i) => {
+    const cached = newsCache[name]
+    const count = cached ? `(${cached.length})` : ''
+    const marker = i === selectedSourceIndex ? '→ ' : '  '
+    return `${marker}${name} ${count}`
+  })
+
+  const list = new ListContainerProperty({
+    xPosition: 0,
+    yPosition: 40,
+    width: W,
+    height: H - 40,
+    borderWidth: 0,
+    borderColor: 5,
+    borderRdaius: 0,
+    paddingLength: 6,
+    containerID: 2,
+    containerName: 'list',
+    itemContainer: new ListItemContainerProperty({
+      itemCount: items.length,
+      itemName: items,
+    }),
+    isEventCapture: 1,
+  })
+
+  await bridge.createStartUpPageContainer(2, [header, list])
+  renderBrowserUI()
+}
+
+async function showHeadlines() {
+  if (!bridge) return
+  currentScreen = 'headlines'
+
+  const sourceName = sourceNames[selectedSourceIndex]
+  const items = newsCache[sourceName] || []
+
+  if (items.length === 0) {
+    await showOnGlasses(sourceName, 'Carregando notícias...')
+    await fetchSource(sourceName)
+    return
+  }
+
+  const item = items[selectedNewsIndex]
+  if (!item) return
+
+  const header = `← ${sourceName} [${selectedNewsIndex + 1}/${items.length}]`
+  let body = `${item.title}\n`
+  if (item.date) body += `${item.date}\n`
+  body += `\n${item.summary || ''}`
+
+  await showOnGlasses(header, body)
+  renderBrowserUI()
 }
 
 async function showOnGlasses(headerText: string, bodyText: string) {
   if (!bridge) return
 
+  const header = new TextContainerProperty({
+    xPosition: 0,
+    yPosition: 0,
+    width: W,
+    height: 36,
+    borderWidth: 1,
+    borderColor: 10,
+    borderRdaius: 0,
+    paddingLength: 4,
+    containerID: 1,
+    containerName: 'header',
+    content: truncate(headerText, 100),
+    isEventCapture: 0,
+  })
+
+  const body = new TextContainerProperty({
+    xPosition: 0,
+    yPosition: 40,
+    width: W,
+    height: H - 40,
+    borderWidth: 0,
+    borderColor: 5,
+    borderRdaius: 0,
+    paddingLength: 6,
+    containerID: 2,
+    containerName: 'body',
+    content: truncate(bodyText, 900),
+    isEventCapture: 1,
+  })
+
+  await bridge.createStartUpPageContainer(2, [header, body])
+}
+
+async function fetchSource(sourceName: string) {
   try {
-    // Header: source + navigation info
-    const headerContainer = new TextContainerProperty({
-      xPosition: 0,
-      yPosition: 0,
-      width: CANVAS_W,
-      height: 40,
-      borderWidth: 1,
-      borderColor: 8,
-      borderRdaius: 0,
-      paddingLength: 4,
-      containerID: 1,
-      containerName: 'header',
-      content: truncate(headerText, 100),
-      isEventCapture: 0,
-    })
-
-    // Body: news content
-    const bodyContainer = new TextContainerProperty({
-      xPosition: 0,
-      yPosition: 44,
-      width: CANVAS_W,
-      height: CANVAS_H - 44,
-      borderWidth: 0,
-      borderColor: 5,
-      borderRdaius: 0,
-      paddingLength: 6,
-      containerID: 2,
-      containerName: 'body',
-      content: truncate(bodyText, 900),
-      isEventCapture: 1,
-    })
-
-    await bridge.createStartUpPageContainer(2, [headerContainer, bodyContainer])
+    const res = await fetch(`/api/news?source=${encodeURIComponent(sourceName)}`)
+    const data = await res.json()
+    newsCache[sourceName] = (data.items || []).slice(0, 5)
   } catch (err) {
-    console.error('Display error:', err)
+    console.error(`Erro ${sourceName}:`, err)
+    newsCache[sourceName] = []
   }
 }
 
-async function updateBody(text: string) {
-  if (!bridge) return
+async function fetchSourcesList() {
   try {
-    await bridge.textContainerUpgrade(
-      new TextContainerUpgrade({
-        containerID: 2,
-        containerName: 'body',
-        contentOffset: 0,
-        contentLength: 900,
-        content: truncate(text, 900),
-      })
-    )
-  } catch {
-    // fallback to full rebuild
-    await showCurrentNews()
+    const res = await fetch('/api/sources')
+    const data = (await res.json()) as SourceResponse
+    const names = (data.sources || []).map((s) => s.name).filter(Boolean)
+    if (names.length > 0) {
+      sourceNames = names
+    }
+  } catch (err) {
+    console.error('Erro ao buscar fontes, usando fallback local.', err)
   }
 }
 
-async function showCurrentNews() {
-  if (newsItems.length === 0) {
-    await showOnGlasses('📰 BR News', 'Carregando notícias...')
+async function fetchAllSources() {
+  await Promise.all(sourceNames.map((name) => fetchSource(name)))
+}
+
+function handleDown() {
+  if (currentScreen === 'sources') {
+    selectedSourceIndex = (selectedSourceIndex + 1) % sourceNames.length
+    showSourceList()
+  } else {
+    const items = newsCache[sourceNames[selectedSourceIndex]] || []
+    if (items.length === 0) return
+    selectedNewsIndex = (selectedNewsIndex + 1) % items.length
+    showHeadlines()
+  }
+}
+
+function handleUp() {
+  if (currentScreen === 'sources') {
+    selectedSourceIndex = (selectedSourceIndex - 1 + sourceNames.length) % sourceNames.length
+    showSourceList()
+  } else {
+    const items = newsCache[sourceNames[selectedSourceIndex]] || []
+    if (items.length === 0) return
+    selectedNewsIndex = (selectedNewsIndex - 1 + items.length) % items.length
+    showHeadlines()
+  }
+}
+
+function handleSelect() {
+  if (currentScreen === 'sources') {
+    selectedNewsIndex = 0
+    expandedHeadlineIndex = null
+    showHeadlines()
+  }
+}
+
+function handleBack() {
+  if (currentScreen === 'headlines') {
+    showSourceList()
+  }
+}
+
+function handleRefresh() {
+  fetchAllSources().then(() => {
+    if (currentScreen === 'sources') {
+      showSourceList()
+      return
+    }
+    showHeadlines()
+  })
+}
+
+function setupInputHandlers() {
+  if (!bridge) return
+
+  bridge.addEventListener('SINGLE_TAP_EVENT', () => handleSelect())
+  bridge.addEventListener('DOUBLE_TAP_EVENT', () => handleBack())
+  bridge.addEventListener('LONG_PRESS_EVENT', () => handleRefresh())
+
+  bridge.addEventListener('SCROLL_DOWN_EVENT', () => handleDown())
+  bridge.addEventListener('SCROLL_UP_EVENT', () => handleUp())
+  bridge.addEventListener('SCROLL_BOTTOM_EVENT', () => handleDown())
+  bridge.addEventListener('SCROLL_TOP_EVENT', () => handleUp())
+
+  bridge.addEventListener('NOD_DOWN_EVENT', () => handleDown())
+  bridge.addEventListener('NOD_UP_EVENT', () => handleUp())
+}
+
+function renderBrowserUI() {
+  const statusEl = document.getElementById('status')
+  const viewEl = document.getElementById('browser-view')
+  if (!statusEl || !viewEl) return
+
+  statusEl.textContent = bridge
+    ? `Conectado ao G2 | Tela: ${currentScreen === 'sources' ? 'Fontes' : sourceNames[selectedSourceIndex]}`
+    : 'Modo browser (sem G2)'
+
+  if (currentScreen === 'sources') {
+    const cards = sourceNames
+      .map((name, index) => {
+        const count = newsCache[name]?.length || 0
+        return `
+        <button class="card source-card" data-role="source-card" data-source-index="${index}">
+          <h3 class="source-card-title">${escapeHtml(name)}</h3>
+          <div class="source-card-meta">${count} manchetes</div>
+        </button>
+      `
+      })
+      .join('')
+
+    viewEl.className = 'view sources'
+    viewEl.innerHTML = `
+      <div class="view-header">
+        <h2 class="view-title">Fontes</h2>
+      </div>
+      ${cards}
+    `
     return
   }
 
-  const item = newsItems[currentIndex]
-  if (!item) return
+  const sourceName = sourceNames[selectedSourceIndex]
+  const items = newsCache[sourceName] || []
 
-  const header = `${item.source} | ${item.date}  [${currentIndex + 1}/${newsItems.length}]`
+  const content =
+    items.length === 0
+      ? '<div class="empty-state">Nenhuma notícia disponível para esta fonte.</div>'
+      : items
+          .map((item, index) => {
+            const isExpanded = expandedHeadlineIndex === index
+            return `
+          <article class="headline-item card">
+            <button class="headline-toggle" data-role="headline-toggle" data-headline-index="${index}">
+              <h3 class="headline-title">${escapeHtml(item.title || 'Sem título')}</h3>
+              <div class="headline-date">${escapeHtml(item.date || 'Data indisponível')}</div>
+            </button>
+            ${
+              isExpanded
+                ? `<div class="headline-content">${escapeHtml(item.summary || 'Sem resumo disponível.')}</div>`
+                : ''
+            }
+          </article>
+        `
+          })
+          .join('')
 
-  let body = `${item.title}\n\n`
-  if (item.summary) {
-    body += item.summary
+  viewEl.className = 'view headlines'
+  viewEl.innerHTML = `
+    <div class="view-header">
+      <button class="back-button" data-role="back-button" type="button">Voltar</button>
+      <h2 class="view-title">${escapeHtml(sourceName)}</h2>
+      <div></div>
+    </div>
+    ${content}
+  `
+}
+
+function onBrowserClick(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  const sourceCard = target.closest<HTMLElement>('[data-role="source-card"]')
+  if (sourceCard) {
+    selectedSourceIndex = Number(sourceCard.dataset.sourceIndex || 0)
+    selectedNewsIndex = 0
+    expandedHeadlineIndex = null
+    currentScreen = 'headlines'
+    if (bridge) {
+      showHeadlines()
+    } else {
+      renderBrowserUI()
+    }
+    return
   }
 
-  await showOnGlasses(header, body)
-  updateBrowserUI()
-}
-
-function nextNews() {
-  if (newsItems.length === 0) return
-  currentIndex = (currentIndex + 1) % newsItems.length
-  showCurrentNews()
-}
-
-function prevNews() {
-  if (newsItems.length === 0) return
-  currentIndex = (currentIndex - 1 + newsItems.length) % newsItems.length
-  showCurrentNews()
-}
-
-function nextSource() {
-  sourceIndex = (sourceIndex + 1) % sources.length
-  currentSource = sources[sourceIndex]
-  currentIndex = 0
-  fetchNews()
-}
-
-// ─── Data ───
-async function fetchNews() {
-  try {
-    const param = currentSource !== 'Todas' ? `?source=${encodeURIComponent(currentSource)}` : ''
-    const res = await fetch(`/api/news${param}`)
-    const data = await res.json()
-    newsItems = data.items || []
-    currentIndex = 0
-    console.log(`📰 ${newsItems.length} notícias (${currentSource})`)
-    await showCurrentNews()
-  } catch (err) {
-    console.error('Fetch error:', err)
+  const backButton = target.closest<HTMLElement>('[data-role="back-button"]')
+  if (backButton) {
+    currentScreen = 'sources'
+    expandedHeadlineIndex = null
     if (bridge) {
-      await showOnGlasses('📰 BR News', 'Erro ao carregar notícias.\nVerifique a conexão.')
+      showSourceList()
+    } else {
+      renderBrowserUI()
+    }
+    return
+  }
+
+  const headlineToggle = target.closest<HTMLElement>('[data-role="headline-toggle"]')
+  if (headlineToggle) {
+    const index = Number(headlineToggle.dataset.headlineIndex || 0)
+    expandedHeadlineIndex = expandedHeadlineIndex === index ? null : index
+    selectedNewsIndex = index
+    if (bridge) {
+      showHeadlines()
+    } else {
+      renderBrowserUI()
     }
   }
 }
 
-// ─── Browser UI (settings page) ───
-function updateBrowserUI() {
-  const el = document.getElementById('current-news')
-  if (!el) return
-  const statusEl = document.getElementById('status')
-
-  if (statusEl) {
-    statusEl.textContent = bridge
-      ? `✅ Conectado | Fonte: ${currentSource} | ${newsItems.length} notícias`
-      : '⏳ Aguardando conexão com G2...'
-  }
-
-  if (newsItems.length === 0) {
-    el.innerHTML = '<p>Carregando...</p>'
-    return
-  }
-
-  el.innerHTML = newsItems
-    .slice(0, 15)
-    .map(
-      (item, i) => `
-    <div class="news-item" style="${i === currentIndex ? 'border-color: #0f0;' : ''}">
-      <span class="news-source">${item.source}</span>
-      <span class="news-time">${item.date}</span>
-      <p class="news-title">${item.title}</p>
-    </div>
-  `
-    )
-    .join('')
-}
-
-// ─── Input Events ───
-function setupInputHandlers() {
-  if (!bridge) return
-
-  // Touch gestures on temple tips
-  bridge.addEventListener('SINGLE_TAP_EVENT', () => nextNews())
-  bridge.addEventListener('DOUBLE_TAP_EVENT', () => nextSource())
-  bridge.addEventListener('LONG_PRESS_EVENT', () => {
-    currentIndex = 0
-    fetchNews() // refresh
-  })
-
-  // Ring scroll
-  bridge.addEventListener('SCROLL_DOWN_EVENT', () => nextNews())
-  bridge.addEventListener('SCROLL_UP_EVENT', () => prevNews())
-
-  // Scroll boundaries
-  bridge.addEventListener('SCROLL_BOTTOM_EVENT', () => nextNews())
-  bridge.addEventListener('SCROLL_TOP_EVENT', () => prevNews())
-
-  // Head gestures
-  bridge.addEventListener('NOD_DOWN_EVENT', () => nextNews())
-  bridge.addEventListener('NOD_UP_EVENT', () => prevNews())
-
-  console.log('🎮 Input handlers registered')
-}
-
-// ─── Init ───
 async function init() {
   const statusEl = document.getElementById('status')
+  const browserView = document.getElementById('browser-view')
+
+  await fetchSourcesList()
+  await fetchAllSources()
+
+  if (browserView) {
+    browserView.addEventListener('click', onBrowserClick)
+  }
 
   try {
     bridge = await waitForEvenAppBridge()
-    if (statusEl) statusEl.textContent = '✅ Conectado ao G2!'
-    console.log('🔗 Bridge connected')
-
+    if (statusEl) statusEl.textContent = 'Conectado ao G2'
     setupInputHandlers()
-    await showOnGlasses('📰 BR News', 'Carregando notícias brasileiras...')
-    await fetchNews()
-
-    // Auto-refresh every 5 minutes
-    setInterval(fetchNews, 5 * 60 * 1000)
-  } catch (err) {
-    console.warn('Bridge not available (running in browser?)')
-    if (statusEl) statusEl.textContent = '🖥 Modo browser (sem G2)'
-    // Still fetch news for browser preview
-    await fetchNews()
+    await showSourceList()
+    setInterval(() => {
+      fetchAllSources().then(() => {
+        if (currentScreen === 'sources') {
+          showSourceList()
+          return
+        }
+        showHeadlines()
+      })
+    }, 5 * 60 * 1000)
+  } catch {
+    if (statusEl) statusEl.textContent = 'Modo browser (sem G2)'
+    renderBrowserUI()
   }
 }
 

@@ -1,18 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BR News - Even G2</title>
+  <title>Even G2 News</title>
   <link rel="stylesheet" href="/src/styles.css">
 </head>
 <body>
-  <div id="app">
-    <h2>📰 BR News</h2>
-    <p>App rodando no Even G2</p>
-    <div id="status">Conectando...</div>
-    <div id="current-news"></div>
-  </div>
+  <main id="app" class="app-shell">
+    <header class="app-header">
+      <h1>Even G2 News</h1>
+      <p class="app-subtitle">Leitor de notícias brasileiras</p>
+      <div id="status" class="status-chip" aria-live="polite">Conectando...</div>
+    </header>
+
+    <section class="view" id="browser-view" aria-live="polite"></section>
+  </main>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

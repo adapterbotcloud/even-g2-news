@@ -1,6 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import Parser from 'rss-parser'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 const app = express()
 const parser = new Parser({
@@ -12,18 +14,23 @@ const parser = new Parser({
 app.use(cors())
 app.use(express.json())
 
+// Serve built frontend
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+app.use(express.static(path.join(__dirname, '..', 'dist')))
+
 interface NewsItem {
   title: string
   source: string
   date: string
   link: string
   summary: string
+  publishedAt: number
 }
 
 const RSS_FEEDS: Record<string, string> = {
-  'G1': 'https://g1.globo.com/rss/g1/',
-  'Folha': 'https://feeds.folha.uol.com.br/emcimadahora/rss091.xml',
-  'Valor': 'https://pox.globo.com/rss/valor/',
+  G1: 'https://g1.globo.com/rss/g1/',
+  Folha: 'https://feeds.folha.uol.com.br/emcimadahora/rss091.xml',
+  Valor: 'https://pox.globo.com/rss/valor/',
   'Estadão': 'https://www.estadao.com.br/arc/outboundfeeds/rss/?outputType=xml',
   'Folha Pol': 'https://feeds.folha.uol.com.br/poder/rss091.xml',
 }
@@ -43,13 +50,27 @@ async function fetchAllFeeds(): Promise<NewsItem[]> {
   for (const [source, url] of Object.entries(RSS_FEEDS)) {
     try {
       const feed = await parser.parseURL(url)
-      const items = (feed.items || []).slice(0, 10).map((item) => ({
-        title: (item.title || 'Sem título').slice(0, 200),
-        source,
-        date: item.pubDate ? new Date(item.pubDate).toLocaleString('pt-BR', { timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit' }) : '',
-        link: item.link || '',
-        summary: (item.contentSnippet || item.content || '').replace(/<[^>]*>/g, '').slice(0, 500),
-      }))
+      const items = (feed.items || []).slice(0, 5).map((item) => {
+        const publishedAt = item.pubDate ? Date.parse(item.pubDate) : 0
+        return {
+          title: (item.title || 'Sem título').slice(0, 200),
+          source,
+          date:
+            publishedAt > 0
+              ? new Date(publishedAt).toLocaleString('pt-BR', {
+                  timeZone: 'America/Fortaleza',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  day: '2-digit',
+                  month: '2-digit',
+                })
+              : '',
+          link: item.link || '',
+          summary: (item.contentSnippet || item.content || '').replace(/<[^>]*>/g, '').slice(0, 500),
+          publishedAt,
+        }
+      })
+
       allItems.push(...items)
       console.log(`✅ ${source}: ${items.length} notícias`)
     } catch (err) {
@@ -57,15 +78,20 @@ async function fetchAllFeeds(): Promise<NewsItem[]> {
     }
   }
 
-  // Sort by date (newest first), mix sources
-  allItems.sort(() => Math.random() - 0.5) // shuffle for variety
+  // Sort by publication date (newest first), mixing all sources.
+  allItems.sort((a, b) => b.publishedAt - a.publishedAt)
   cachedNews = allItems
   lastFetch = now
   console.log(`Total: ${allItems.length} notícias em cache`)
   return allItems
 }
 
-// GET /api/news - all news
+// GET /api/sources - source names
+app.get('/api/sources', (req, res) => {
+  res.json({ sources: Object.keys(RSS_FEEDS).map((name) => ({ name })) })
+})
+
+// GET /api/news - all news or by source
 app.get('/api/news', async (req, res) => {
   try {
     const source = req.query.source as string | undefined
@@ -91,6 +117,13 @@ app.get('/api/news/:index', async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar notícia' })
+  }
+})
+
+// SPA fallback
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'))
   }
 })
 
