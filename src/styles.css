@@ -7,6 +7,8 @@
   --brand: #59d4ff;
   --brand-soft: rgba(89, 212, 255, 0.18);
   --ok: #22c55e;
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.16);
   --border: #25304a;
   --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
 }
@@ -40,10 +42,41 @@ body {
   padding: 0.75rem 0 1rem;
 }
 
+.app-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .app-header h1 {
   margin: 0;
   font-size: clamp(1.45rem, 4vw, 1.9rem);
   letter-spacing: 0.02em;
+}
+
+.icon-button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 1.05rem;
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.icon-button.active,
+.icon-button:hover:not(:disabled) {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+
+.icon-button:disabled {
+  cursor: default;
+  opacity: 0.8;
 }
 
 .app-subtitle {
@@ -81,7 +114,8 @@ body {
   font-size: 1.1rem;
 }
 
-.back-button {
+.back-button,
+.save-button {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.5rem 0.75rem;
@@ -89,6 +123,11 @@ body {
   color: var(--text);
   font-weight: 600;
   cursor: pointer;
+}
+
+.save-button {
+  border-color: rgba(89, 212, 255, 0.5);
+  background: var(--brand-soft);
 }
 
 .card,
@@ -157,6 +196,99 @@ body {
   background: rgba(18, 23, 34, 0.75);
 }
 
+.settings-status {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  color: var(--brand);
+  font-size: 0.9rem;
+  background: rgba(18, 23, 34, 0.75);
+}
+
+.settings-source-item {
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.settings-source-grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.settings-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.settings-field span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.settings-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(7, 9, 13, 0.65);
+  color: var(--text);
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+}
+
+.settings-input:focus {
+  outline: 2px solid var(--brand-soft);
+  border-color: var(--brand);
+}
+
+.settings-item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.settings-toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.settings-reorder-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.reorder-button,
+.delete-button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  padding: 0.42rem 0.56rem;
+  font-weight: 600;
+}
+
+.delete-button {
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #ffd6d6;
+  background: var(--danger-soft);
+}
+
+.settings-add-form {
+  padding: 1rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.settings-add-form h3 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
 @media (min-width: 640px) {
   .view.sources {
     grid-template-columns: 1fr 1fr;
@@ -164,5 +296,9 @@ body {
 
   .view.sources .view-header {
     grid-column: 1 / -1;
+  }
+
+  .settings-source-grid {
+    grid-template-columns: 1fr 2fr;
   }
 }

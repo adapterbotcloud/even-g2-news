@@ -1,0 +1,27 @@
+[
+  {
+    "name": "O Povo",
+    "url": "https://www.opovo.com.br/rss.xml",
+    "enabled": true
+  },
+  {
+    "name": "Diário do Nordeste",
+    "url": "https://diariodonordeste.verdesmares.com.br/rss.xml",
+    "enabled": true
+  },
+  {
+    "name": "UOL",
+    "url": "https://rss.uol.com.br/feed/noticias.xml",
+    "enabled": true
+  },
+  {
+    "name": "G1",
+    "url": "https://g1.globo.com/rss/g1/",
+    "enabled": true
+  },
+  {
+    "name": "Valor Econômico",
+    "url": "https://pox.globo.com/rss/valor/",
+    "enabled": true
+  }
+]
